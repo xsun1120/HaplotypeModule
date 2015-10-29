@@ -263,8 +263,8 @@ function inputPhasedGenotype!(g::Genome, breedIdx::Int64, fileName::ASCIIString)
 
             a1 = ascii(lnData[idx])[1]
             a2 = ascii(lnData[idx])[3]
-            g.Pop[tempInd].matHap = join([g.Pop[tempInd].matHap, a1])
-            g.Pop[tempInd].patHap = join([g.Pop[tempInd].patHap, a2])
+            g.Pop[tempInd].matHap *= string(a1) # join([g.Pop[tempInd].matHap, a1])
+            g.Pop[tempInd].patHap *= string(a2) # join([g.Pop[tempInd].patHap, a2])
 
             g.SNPInfoMap[tempSNP].breedFreq[breedIdx] += (parse(Int64, a1) + parse(Int64, a2))
             g.SNPInfoMap[tempSNP].freq += (parse(Int64, a1) + parse(Int64, a2))
@@ -421,10 +421,10 @@ end
 
 #test
 
-using HaplotypeModule
+#using HaplotypeModule
 
-cd("~/data/")
+#cd("~/data/")
 
-myGenome = HaplotypeModule.makeGenome("AAN,CHA")
-HaplotypeModule.getBreedComposition!(myGenome, 500000, 0.1, "SNPInfo.AAN", "test")
+#myGenome = HaplotypeModule.makeGenome("AAN,CHA")
+#HaplotypeModule.getBreedComposition!(myGenome, 500000, 0.1, "SNPInfo.AAN", "test")
 
