@@ -68,7 +68,8 @@ type Genome
     numberInd::Int64
 end
 
-function makeGenome(breedStr::ASCIIString)
+function makeGenome(breedStr::ASCIIString)  # make a genome object
+    # breedStr: 3-letter abbr. of breed names to include in analysis, separated by , e.g. "AAN,CHA,GVH"
     breedData = split(breedStr, ',')
     nBreeds = length(breedData)
     breeds = ASCIIString[]
@@ -95,6 +96,7 @@ end
 
 
 function inputPhenotype!(g::Genome, fileName::ASCIIString, breedIdx::Int64)
+    # input ids for animals in the breedIdx-th breed from fileName in GenSel phenotype file format
     d = open(fileName)
     lineNumber = 0
     for ln in eachline(d)
@@ -115,6 +117,8 @@ function inputPhenotype!(g::Genome, fileName::ASCIIString, breedIdx::Int64)
 end
 
 function inputSNPInfo!(g::Genome, fileName::ASCIIString)
+    # input sorted SNP id, chr and pos information from map file fileName
+    # these SNPs are used to construct haplotypes and their genotypes should be available in all breeds
     d = open(fileName)
     lineNumber = 0
     thisChr = 0
@@ -153,6 +157,7 @@ function inputSNPInfo!(g::Genome, fileName::ASCIIString)
 end
 
 function genomeSegmentation!(g::Genome, segLength::Int64, fileName::ASCIIString)
+    # divide SNPs into windows with segLength basepairs, results written to fileName.* 
     numberSegments = 0;
     numberSegmentsThisChr = 0;
     println("Genome divided into $segLength bp segments.")
@@ -223,6 +228,10 @@ end
 
 
 function inputPhasedGenotype!(g::Genome, breedIdx::Int64, fileName::ASCIIString)
+    # input phased genotypes for individuals in the breedIdx-th breed from fileName
+    # this function reads *.vcf.gz format for each chromosome
+    indColumnIdx = [] # Array{Int64}()
+    indNames = [] # Array{ASCIIString}()
     run(`gzip -d $fileName.gz`)
     d = open(fileName)
     lineNumber = 0
@@ -234,33 +243,42 @@ function inputPhasedGenotype!(g::Genome, breedIdx::Int64, fileName::ASCIIString)
             for i = 10:length(lnData)
                 tempInd = ascii(lnData[i])
                 haskey(g.Pop, tempInd) || continue
-                g.Pop[tempInd].index = i
+                # g.Pop[tempInd].index = i
+                push!(indColumnIdx, i)
+                push!(indNames, tempInd)
             end
+            println("Number of individuals found in $fileName: $(length(indColumnIdx))")
             continue
         end
 
         lnData = split(ln)
         tempSNP = ascii(lnData[3])
         haskey(g.SNPInfoMap, tempSNP) || continue
-        for tempInd in keys(g.Pop)
-            g.Pop[tempInd].breed == breedIdx || continue
-            idx = g.Pop[tempInd].index
-            token = ascii(lnData[idx])
-            a1 = token[1]
-            a2 = token[3]
-            g.Pop[tempInd].matHap = join([g.Pop[tempInd].matHap, a1]) # better way?
-            g.Pop[tempInd].patHap = join([g.Pop[tempInd].patHap, a2]) # better way?
+        #for tempInd in keys(g.Pop)
+            #g.Pop[tempInd].breed == breedIdx || continue
+            #idx = g.Pop[tempInd].index
+        for i = 1:length(indColumnIdx)
+            tempInd = indNames[i]
+            idx = indColumnIdx[i]
+
+            a1 = ascii(lnData[idx])[1]
+            a2 = ascii(lnData[idx])[3]
+            g.Pop[tempInd].matHap = join([g.Pop[tempInd].matHap, a1])
+            g.Pop[tempInd].patHap = join([g.Pop[tempInd].patHap, a2])
 
             g.SNPInfoMap[tempSNP].breedFreq[breedIdx] += (parse(Int64, a1) + parse(Int64, a2))
             g.SNPInfoMap[tempSNP].freq += (parse(Int64, a1) + parse(Int64, a2))
         end
     end
     run(`gzip $fileName`)
-    println("Read phased genotypes for $(length(g.Pop)) individuals from $fileName")
+    println("Read phased genotypes for $(lineNumber-10) SNPs from $fileName")
     close(d)    
 end
 
 function getHaplotypeAlleles!(g::Genome, rareHapFreq::Float64, fileName::ASCIIString)
+    # construct haplotype alleles with length previously specified
+    # common haplotypes have frequency larger than rareHapFreq
+    # results written to fileName.*
     outSeg = open("$fileName.unique","w")
     write(outSeg, "index chr nUnique nCommon\n")
     for j = 1:length(g.Segments)
@@ -312,7 +330,7 @@ end
 
 
 function getBreedComposition!(g::Genome, hapLength::Int64, rareHapFreq::Float64, mapFile::ASCIIString, outFile::ASCIIString)
-
+    # calculate breed composition using both SNPs and haplotypes, calling all above functions
     inputSNPInfo!(g, mapFile)
     genomeSegmentation!(g, hapLength, outFile)
 
@@ -341,7 +359,7 @@ function getBreedComposition!(g::Genome, hapLength::Int64, rareHapFreq::Float64,
             rowIdx += 1
             g.Segments[j].uniqueHap[tempHap].index = rowIdx
             XHap[rowIdx,:] = g.Segments[j].uniqueHap[tempHap].breedFreq
-            write(outHap, "$rowIdx $(g.Segments[j].index) $(g.Segments[j].chr) $(g.Segments[j].indexOnChr), $(g.Segments[j].indexOnChr), $(g.Segments[j].uniqueHap[tempHap].freq), $(join(g.Segments[j].uniqueHap[tempHap].breedFreq," ")) $(g.Segments[j].uniqueHap[tempHap].alleleState)\n" )
+            write(outHap, "$rowIdx $(g.Segments[j].index) $(g.Segments[j].chr) $(g.Segments[j].indexOnChr) $(g.Segments[j].uniqueHap[tempHap].freq) $(join(g.Segments[j].uniqueHap[tempHap].breedFreq," ")) $(g.Segments[j].uniqueHap[tempHap].alleleState)\n" )
         end
     end
     close(outHap)
@@ -365,19 +383,19 @@ function getBreedComposition!(g::Genome, hapLength::Int64, rareHapFreq::Float64,
     write(outHap, "id breed $(join(g.Breeds," "))\n")
     write(outSNP, "id breed $(join(g.Breeds," "))\n")
 
-    yHap = zeros(Float64, g.totalNumberCommon)
-    ySNP = zeros(Float64, g.numberSNPs)
     for tempInd in keys(g.Pop)
+        yHap = zeros(Float64, g.totalNumberCommon)
+        ySNP = zeros(Float64, g.numberSNPs)
         for j = 1:length(g.Segments)
             begIdx = g.SNPInfoMap[g.Segments[j].begSNP].index
             endIdx = g.SNPInfoMap[g.Segments[j].endSNP].index
             tempHap = g.Pop[tempInd].matHap[begIdx:endIdx]
-            if in(g.Segments[j].commonHap, tempHap)
+            if in(tempHap, g.Segments[j].commonHap)
                 rowIdx = g.Segments[j].uniqueHap[tempHap].index
                 yHap[rowIdx] += 0.5
             end
             tempHap = g.Pop[tempInd].patHap[begIdx:endIdx]
-            if in(g.Segments[j].commonHap, tempHap)
+            if in(tempHap, g.Segments[j].commonHap)
                 rowIdx = g.Segments[j].uniqueHap[tempHap].index
                 yHap[rowIdx] += 0.5
             end
@@ -392,24 +410,21 @@ function getBreedComposition!(g::Genome, hapLength::Int64, rareHapFreq::Float64,
         ySNP /= 2.0
         g.Pop[tempInd].compSNP = inv(XSNP'XSNP) * XSNP' * ySNP
         write(outSNP, "$tempInd $(g.Breeds[g.Pop[tempInd].breed]) $(join(g.Pop[tempInd].compSNP," "))\n")
-
     end
     close(outHap)
     close(outSNP)
     println("Breed composition written to $outFile.compHap and $outFile.compSNP")
 end
 
-
 end
 
 
-# test
+#test
 
 using HaplotypeModule
 
-cd("/home/juser/data/")
+cd("~/data/")
 
 myGenome = HaplotypeModule.makeGenome("AAN,CHA")
 HaplotypeModule.getBreedComposition!(myGenome, 500000, 0.1, "SNPInfo.AAN", "test")
-
 
