@@ -230,8 +230,8 @@ end
 function inputPhasedGenotype!(g::Genome, breedIdx::Int64, fileName::ASCIIString)
     # input phased genotypes for individuals in the breedIdx-th breed from fileName
     # this function reads *.vcf.gz format for each chromosome
-    indColumnIdx = [] # Array{Int64}()
-    indNames = [] # Array{ASCIIString}()
+    indColumnIdx = []
+    indNames = []
     run(`gzip -d $fileName.gz`)
     d = open(fileName)
     lineNumber = 0
